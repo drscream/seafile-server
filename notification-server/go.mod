@@ -1,4 +1,4 @@
-module github.com/seafileltd/seafile-pro-server/notification-server
+module github.com/haiwen/seafile-server/notification-server
 
 go 1.17
 

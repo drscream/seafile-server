@@ -12,7 +12,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
-	"github.com/seafileltd/seafile-pro-server/notification-server/clientmgr"
+	"github.com/haiwen/seafile-server/notification-server/clientmgr"
 	"gopkg.in/ini.v1"
 )
 
