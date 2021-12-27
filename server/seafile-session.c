@@ -44,6 +44,8 @@ seafile_session_new(const char *central_config_dir,
     GKeyFile *config;
     GKeyFile *ccnet_config;
     SeafileSession *session = NULL;
+    char *notif_url = NULL;
+    char *notif_token = NULL;
 
     abs_ccnet_dir = ccnet_expand_path (ccnet_dir);
     abs_seafile_dir = ccnet_expand_path (seafile_dir);
@@ -122,6 +124,14 @@ seafile_session_new(const char *central_config_dir,
         }
         g_free (type);
     }
+
+    notif_url = g_key_file_get_string (config,
+                                       "notification", "notification_url",
+                                       NULL);
+
+    notif_token = g_key_file_get_string (config,
+                                         "notification", "notification_token",
+                                         NULL);
 
     if (load_database_config (session) < 0) {
         seaf_warning ("Failed to load database config.\n");
@@ -204,9 +214,17 @@ seafile_session_new(const char *central_config_dir,
     if (!session->org_mgr)
         goto onerror;
 
+    if (notif_url != NULL && notif_token != NULL) {
+        session->notif_mgr = seaf_notif_manager_new (session, notif_url, notif_token);
+        if (!session->notif_mgr)
+            goto onerror;
+    }
+
     return session;
 
 onerror:
+    g_free (notif_url);
+    g_free (notif_token);
     free (abs_seafile_dir);
     free (abs_ccnet_dir);
     g_free (tmp_file_dir);
