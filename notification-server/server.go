@@ -5,14 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
-	"github.com/haiwen/seafile-server/notification-server/clientmgr"
+	log "github.com/sirupsen/logrus"
 	"gopkg.in/ini.v1"
 )
 
@@ -85,32 +84,30 @@ func main() {
 		log.SetOutput(fp)
 	}
 
-	// When logFile is "-", use default output (StdOut)
-	log.SetFlags(log.Ldate | log.Ltime)
-
 	loadConfig()
 
-	clientmgr.Init()
+	Init()
 
 	router := newHTTPRouter()
 
-	log.Printf("notification server started.")
+	log.Info("notification server started.")
 
 	addr := fmt.Sprintf("%s:%d", host, port)
 	err = http.ListenAndServe(addr, router)
 	if err != nil {
-		log.Printf("notificationserver exiting: %v", err)
+		log.Info("notificationserver exiting: %v", err)
 	}
 }
 
 func newHTTPRouter() *mux.Router {
 	r := mux.NewRouter()
 	r.Handle("/", appHandler(messageCB))
-	r.Handle("/events/{slash:\\/?}", appHandler(eventCB))
+	r.Handle("/events{slash:\\/?}", appHandler(eventCB))
 
 	return r
 }
 
+// Any http request will be automatically upgraded to websocket.
 func messageCB(rsp http.ResponseWriter, r *http.Request) *appError {
 	upgrader := newUpgrader()
 	conn, err := upgrader.Upgrade(rsp, r, nil)
@@ -122,15 +119,17 @@ func messageCB(rsp http.ResponseWriter, r *http.Request) *appError {
 		}
 	}
 
-	client := clientmgr.NewClient(conn)
-	client.Register()
-	client.Connect()
+	addr := r.Header.Get("x-forwarded-for")
+	fmt.Println(addr)
+	client := NewClient(conn)
+	RegisterClient(client)
+	client.HandleMessages()
 
 	return nil
 }
 
 func eventCB(rsp http.ResponseWriter, r *http.Request) *appError {
-	msg := clientmgr.Message{}
+	msg := Message{}
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -147,10 +146,7 @@ func eventCB(rsp http.ResponseWriter, r *http.Request) *appError {
 		}
 	}
 
-	event := msg.ParseEvent()
-	if event != nil {
-		event.Notify()
-	}
+	Notify(&msg)
 
 	return nil
 }
@@ -179,7 +175,7 @@ func (fn appHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	e := fn(w, r)
 	if e != nil {
 		if e.Error != nil && e.Code == http.StatusInternalServerError {
-			log.Printf("path %s internal server error: %v\n", r.URL.Path, e.Error)
+			log.Infof("path %s internal server error: %v\n", r.URL.Path, e.Error)
 		}
 		http.Error(w, e.Message, e.Code)
 	}
